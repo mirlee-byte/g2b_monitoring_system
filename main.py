@@ -1,6 +1,6 @@
 """
 나라장터 입찰 모니터링 메인 실행 스크립트
-매일 09:30에 자동 실행되며, 수동 실행도 가능합니다.
+매일 10:00에 자동 실행되며, 수동 실행도 가능합니다.
 
 사용법:
   python main.py            # 스케줄러 시작 (백그라운드 실행)
@@ -32,6 +32,7 @@ from notifier import (
     send_google_chat_message, format_bid_message,
     send_summary_message, send_error_message
 )
+# 첨부파일 실제 업로드(Chat API)는 chat_sender.py 참고 — 도메인 전체 위임 설정 후 사용
 
 # 로깅 설정
 logging.basicConfig(
@@ -77,7 +78,7 @@ def run_monitoring():
                 bid_result = {**bid, "analysis": analysis}
                 results.append(bid_result)
 
-                # 점수가 기준 이상이면 알림 전송
+                # 점수가 기준 이상이면 알림 전송 (첨부파일은 다운로드 링크로 포함)
                 if score >= MIN_SCORE_TO_NOTIFY:
                     logger.info(f"✅ 적격 공고 발견 (점수: {score}/10): {bid.get('title', '')[:30]}")
                     message = format_bid_message(bid, analysis)

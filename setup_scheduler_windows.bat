@@ -11,11 +11,11 @@ set LOG_PATH=%~dp0scheduler.log
 
 echo 작업 스케줄러에 등록 중...
 
-schtasks /create /tn "%TASK_NAME%" /tr "%PYTHON_PATH% %SCRIPT_PATH% --now" /sc daily /st 09:30 /f /rl highest
+schtasks /create /tn "%TASK_NAME%" /tr "%PYTHON_PATH% %SCRIPT_PATH% --now" /sc daily /st 10:00 /f /rl highest
 
 if %errorlevel% == 0 (
     echo.
-    echo ✅ 성공! 매일 오전 09:30에 자동 실행됩니다.
+    echo ✅ 성공! 매일 오전 10:00에 자동 실행됩니다.
     echo.
     echo 작업 이름: %TASK_NAME%
     echo 실행 파일: %SCRIPT_PATH%

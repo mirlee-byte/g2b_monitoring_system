@@ -2,9 +2,17 @@
 # 나라장터 입찰 모니터링 설정
 # ============================================================
 
-# Google Chat Webhook URL
+# Google Chat Webhook URL (텍스트 전용 — 파일 첨부 불가)
 import os
 GOOGLE_CHAT_WEBHOOK_URL = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
+
+# ── Google Chat API (파일 업로드용, 도메인 전체 위임 방식) ──
+# 서비스 계정 키 파일 경로
+GOOGLE_SA_KEY_FILE = os.environ.get("GOOGLE_SA_KEY_FILE", "service_account.json")
+# 메시지를 보낼 스페이스 리소스명 (예: "spaces/AAAAxxxxxx")
+GOOGLE_CHAT_SPACE = os.environ.get("GOOGLE_CHAT_SPACE", "")
+# 서비스 계정이 대행할 Workspace 사용자 이메일 (도메인 전체 위임)
+GOOGLE_CHAT_IMPERSONATE_USER = os.environ.get("GOOGLE_CHAT_IMPERSONATE_USER", "")
 # 검색 키워드 목록
 SEARCH_KEYWORDS = [
     "VR",
@@ -22,8 +30,8 @@ SEARCH_KEYWORDS = [
     "디지털콘텐츠",
 ]
 
-# 실행 시간 (매일 09:30)
-RUN_TIME = "09:30"
+# 실행 시간 (매일 10:00)
+RUN_TIME = "10:00"
 
 # 첨부파일 저장 경로
 DOWNLOAD_DIR = "./downloads"
