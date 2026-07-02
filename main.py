@@ -17,6 +17,7 @@ import argparse
 import schedule
 import time
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 프로젝트 루트를 경로에 추가
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
     GOOGLE_CHAT_WEBHOOK_URL, SEARCH_KEYWORDS, RUN_TIME,
     DOWNLOAD_DIR, COMPANY_PROFILE, CLAUDE_MODEL,
-    MAX_BIDS_PER_RUN, MIN_SCORE_TO_NOTIFY
+    MAX_BIDS_PER_RUN, MIN_SCORE_TO_NOTIFY, ANALYZE_MAX_WORKERS
 )
 from crawler import run_crawler
 from analyzer import analyze_bid_eligibility
@@ -65,33 +66,37 @@ def run_monitoring():
 
         # 최대 처리 수 제한
         bids = bids[:MAX_BIDS_PER_RUN]
-        logger.info(f"📋 분석할 공고 수: {len(bids)}건")
+        logger.info(f"📋 분석할 공고 수: {len(bids)}건 (AI 분석 동시 {ANALYZE_MAX_WORKERS})")
 
-        # 2단계: AI 분석 및 알림
-        for i, bid in enumerate(bids):
-            logger.info(f"🤖 AI 분석 중 [{i+1}/{len(bids)}]: {bid.get('title', '')[:30]}...")
-
+        # 2단계: AI 분석 (병렬) — I/O 대기가 대부분이라 스레드 풀로 동시 처리
+        def analyze_one(bid: dict) -> dict:
             try:
                 analysis = analyze_bid_eligibility(bid, COMPANY_PROFILE, CLAUDE_MODEL)
                 score = analysis.get("score", 0)
-
-                bid_result = {**bid, "analysis": analysis}
-                results.append(bid_result)
-
-                # 점수가 기준 이상이면 알림 전송 (첨부파일은 다운로드 링크로 포함)
-                if score >= MIN_SCORE_TO_NOTIFY:
-                    logger.info(f"✅ 적격 공고 발견 (점수: {score}/10): {bid.get('title', '')[:30]}")
-                    message = format_bid_message(bid, analysis)
-                    send_google_chat_message(GOOGLE_CHAT_WEBHOOK_URL, message)
-                    time.sleep(1)  # API 레이트 리밋 방지
-                else:
-                    logger.info(f"❌ 부적격 공고 (점수: {score}/10): {bid.get('title', '')[:30]}")
-
+                verdict = "✅ 적격" if score >= MIN_SCORE_TO_NOTIFY else "❌ 부적격"
+                logger.info(f"🤖 {verdict} (점수: {score}/10): {bid.get('title', '')[:30]}")
+                return {**bid, "analysis": analysis}
             except Exception as e:
-                logger.error(f"공고 분석 오류: {e}")
-                continue
+                logger.error(f"공고 분석 오류 [{bid.get('title', '')[:30]}]: {e}")
+                return None
 
-        # 3단계: 일일 요약 전송
+        with ThreadPoolExecutor(max_workers=ANALYZE_MAX_WORKERS) as executor:
+            for result in executor.map(analyze_one, bids):
+                if result:
+                    results.append(result)
+
+        # 3단계: 적격 공고 알림 전송 (점수 높은 순, 순차 전송)
+        qualified = sorted(
+            [r for r in results if r.get("analysis", {}).get("score", 0) >= MIN_SCORE_TO_NOTIFY],
+            key=lambda r: r["analysis"].get("score", 0),
+            reverse=True,
+        )
+        logger.info(f"🔔 적격 공고 {len(qualified)}건 알림 전송 중...")
+        for r in qualified:
+            message = format_bid_message(r, r["analysis"])
+            send_google_chat_message(GOOGLE_CHAT_WEBHOOK_URL, message)
+
+        # 4단계: 일일 요약 전송
         logger.info("📊 일일 요약 전송 중...")
         send_summary_message(GOOGLE_CHAT_WEBHOOK_URL, results, run_time)
 

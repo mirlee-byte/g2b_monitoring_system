@@ -16,6 +16,7 @@ import logging
 import requests
 from urllib.parse import urlparse, unquote
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,6 +24,18 @@ logger = logging.getLogger(__name__)
 
 G2B_API_KEY = os.environ.get("G2B_API_KEY", "")
 G2B_API_BASE = "https://apis.data.go.kr/1230000/ad/BidPublicInfoService"
+
+try:
+    from config import CRAWL_MAX_WORKERS
+except Exception:
+    CRAWL_MAX_WORKERS = 8
+
+# 검색 대상 엔드포인트 (공고 유형별)
+ENDPOINTS = [
+    ("용역", "getBidPblancListInfoServcPPSSrch"),
+    ("물품", "getBidPblancListInfoThngPPSSrch"),
+    ("기타", "getBidPblancListInfoEtcPPSSrch"),
+]
 
 def get_date_range():
     """
@@ -36,60 +49,50 @@ def get_date_range():
     return start.strftime("%Y%m%d%H%M"), end.strftime("%Y%m%d%H%M")
 
 
-def fetch_bids_by_keyword(keyword: str, num_rows: int = 100) -> list:
+def fetch_endpoint(keyword: str, bid_type: str, endpoint: str,
+                   start_dt: str, end_dt: str, num_rows: int = 100) -> list:
     """
-    PPSSrch 엔드포인트로 공고명 키워드 검색
-    용역/물품 두 가지 타입으로 검색
+    단일 (키워드 × 엔드포인트) API 호출 → 파싱된 공고 리스트 반환.
+    스레드 풀에서 병렬 실행되는 작업 단위이며, 오류 시 빈 리스트를 돌려준다.
     """
-    start_dt, end_dt = get_date_range()
+    url = f"{G2B_API_BASE}/{endpoint}"
+    params = {
+        "ServiceKey": G2B_API_KEY,   # 대문자 S (문서 확인)
+        "numOfRows": str(num_rows),
+        "pageNo": "1",
+        "inqryDiv": "1",             # 1=등록일시 기준
+        "inqryBgnDt": start_dt,
+        "inqryEndDt": end_dt,
+        "bidNtceNm": keyword,
+        "type": "json",
+    }
+
     results = []
+    try:
+        resp = requests.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
 
-    endpoints = [
-        ("용역", "getBidPblancListInfoServcPPSSrch"),
-        ("물품", "getBidPblancListInfoThngPPSSrch"),
-        ("기타", "getBidPblancListInfoEtcPPSSrch"),
-    ]
+        body = data.get("response", {}).get("body", {})
+        total = body.get("totalCount", 0)
+        items = body.get("items", [])
 
-    for bid_type, endpoint in endpoints:
-        url = f"{G2B_API_BASE}/{endpoint}"
-        params = {
-            "ServiceKey": G2B_API_KEY,   # 대문자 S (문서 확인)
-            "numOfRows": str(num_rows),
-            "pageNo": "1",
-            "inqryDiv": "1",             # 1=등록일시 기준
-            "inqryBgnDt": start_dt,
-            "inqryEndDt": end_dt,
-            "bidNtceNm": keyword,
-            "type": "json",
-        }
+        if not items:
+            logger.debug(f"[{keyword}/{bid_type}] 결과 없음")
+            return results
 
-        try:
-            resp = requests.get(url, params=params, timeout=15)
-            resp.raise_for_status()
-            data = resp.json()
+        if isinstance(items, dict):
+            items = [items]
 
-            body = data.get("response", {}).get("body", {})
-            total = body.get("totalCount", 0)
-            items = body.get("items", [])
+        logger.info(f"[{keyword}/{bid_type}] {len(items)}건 / 전체 {total}건")
 
-            if not items:
-                logger.debug(f"[{keyword}/{bid_type}] 결과 없음")
-                continue
+        for item in items:
+            bid = parse_bid_item(item, keyword, bid_type)
+            if bid:
+                results.append(bid)
 
-            if isinstance(items, dict):
-                items = [items]
-
-            logger.info(f"[{keyword}/{bid_type}] {len(items)}건 / 전체 {total}건")
-
-            for item in items:
-                bid = parse_bid_item(item, keyword, bid_type)
-                if bid:
-                    results.append(bid)
-
-        except Exception as e:
-            logger.error(f"[{keyword}/{bid_type}] API 오류: {e}")
-
-        time.sleep(0.3)
+    except Exception as e:
+        logger.error(f"[{keyword}/{bid_type}] API 오류: {e}")
 
     return results
 
@@ -239,25 +242,25 @@ def run_crawler(keywords: list, download_dir: str = "./downloads") -> list:
     seen = set()
 
     start_dt, end_dt = get_date_range()
-    logger.info(f"나라장터 Open API 검색 시작 ({len(keywords)}개 키워드)")
+    # 모든 (키워드 × 엔드포인트) 조합을 작업 단위로 만들어 병렬 호출
+    tasks = [(kw, bt, ep) for kw in keywords for bt, ep in ENDPOINTS]
+    logger.info(f"나라장터 Open API 검색 시작 "
+                f"({len(keywords)}개 키워드 × {len(ENDPOINTS)}개 엔드포인트 = {len(tasks)}건, "
+                f"동시 {CRAWL_MAX_WORKERS})")
     logger.info(f"검색 기간: {start_dt} ~ {end_dt}")
 
-    for i, keyword in enumerate(keywords):
-        logger.info(f"[{i+1}/{len(keywords)}] '{keyword}' 검색 중...")
-        bids = fetch_bids_by_keyword(keyword)
-
-        new_count = 0
-        for bid in bids:
-            key = bid.get("bid_no", "") or bid.get("title", "")
-            if key and key not in seen:
-                seen.add(key)
-                all_bids.append(bid)
-                new_count += 1
-
-        if new_count > 0:
-            logger.info(f"  → 신규 {new_count}건 (누적 {len(all_bids)}건)")
-
-        time.sleep(0.5)
+    with ThreadPoolExecutor(max_workers=CRAWL_MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(fetch_endpoint, kw, bt, ep, start_dt, end_dt): (kw, bt)
+            for kw, bt, ep in tasks
+        }
+        # 결과 취합·중복 제거는 메인 스레드에서 단일 수행 (스레드 안전)
+        for future in as_completed(futures):
+            for bid in future.result():
+                key = bid.get("bid_no", "") or bid.get("title", "")
+                if key and key not in seen:
+                    seen.add(key)
+                    all_bids.append(bid)
 
     logger.info(f"✅ 총 {len(all_bids)}개 고유 공고 수집")
     return all_bids
