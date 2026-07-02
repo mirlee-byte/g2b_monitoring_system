@@ -56,7 +56,7 @@ def run_monitoring():
 
     try:
         # 1단계: 크롤링
-        logger.info("📡 나라장터 크롤링 시작...")
+        logger.info("나라장터 크롤링 시작...")
         bids = run_crawler(SEARCH_KEYWORDS, DOWNLOAD_DIR)
 
         if not bids:
@@ -66,15 +66,15 @@ def run_monitoring():
 
         # 최대 처리 수 제한
         bids = bids[:MAX_BIDS_PER_RUN]
-        logger.info(f"📋 분석할 공고 수: {len(bids)}건 (AI 분석 동시 {ANALYZE_MAX_WORKERS})")
+        logger.info(f"분석할 공고 수: {len(bids)}건 (AI 분석 동시 {ANALYZE_MAX_WORKERS})")
 
         # 2단계: AI 분석 (병렬) — I/O 대기가 대부분이라 스레드 풀로 동시 처리
         def analyze_one(bid: dict) -> dict:
             try:
                 analysis = analyze_bid_eligibility(bid, COMPANY_PROFILE, CLAUDE_MODEL)
                 score = analysis.get("score", 0)
-                verdict = "✅ 적격" if score >= MIN_SCORE_TO_NOTIFY else "❌ 부적격"
-                logger.info(f"🤖 {verdict} (점수: {score}/10): {bid.get('title', '')[:30]}")
+                verdict = "적격" if score >= MIN_SCORE_TO_NOTIFY else "부적격"
+                logger.info(f"[{verdict}] (점수: {score}/10): {bid.get('title', '')[:30]}")
                 return {**bid, "analysis": analysis}
             except Exception as e:
                 logger.error(f"공고 분석 오류 [{bid.get('title', '')[:30]}]: {e}")
@@ -91,13 +91,13 @@ def run_monitoring():
             key=lambda r: r["analysis"].get("score", 0),
             reverse=True,
         )
-        logger.info(f"🔔 적격 공고 {len(qualified)}건 알림 전송 중...")
+        logger.info(f"적격 공고 {len(qualified)}건 알림 전송 중...")
         for r in qualified:
             message = format_bid_message(r, r["analysis"])
             send_google_chat_message(GOOGLE_CHAT_WEBHOOK_URL, message)
 
         # 4단계: 일일 요약 전송
-        logger.info("📊 일일 요약 전송 중...")
+        logger.info("일일 요약 전송 중...")
         send_summary_message(GOOGLE_CHAT_WEBHOOK_URL, results, run_time)
 
     except Exception as e:
@@ -110,7 +110,7 @@ def run_monitoring():
 
 def test_webhook():
     """Webhook 연결 테스트"""
-    logger.info("🧪 Webhook 테스트 중...")
+    logger.info("Webhook 테스트 중...")
     test_msg = f"""
 🔧 *[나라장터 모니터링 시스템 테스트]* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
@@ -125,9 +125,9 @@ def test_webhook():
 
     success = send_google_chat_message(GOOGLE_CHAT_WEBHOOK_URL, test_msg)
     if success:
-        logger.info("✅ Webhook 테스트 성공!")
+        logger.info("Webhook 테스트 성공")
     else:
-        logger.error("❌ Webhook 테스트 실패!")
+        logger.error("Webhook 테스트 실패")
     return success
 
 
@@ -146,7 +146,7 @@ def main():
         return
 
     # 스케줄러 모드: 매일 RUN_TIME에 실행
-    logger.info(f"🕐 스케줄러 시작: 매일 {RUN_TIME}에 실행됩니다.")
+    logger.info(f"스케줄러 시작: 매일 {RUN_TIME}에 실행됩니다.")
     logger.info("종료하려면 Ctrl+C를 누르세요.")
 
     schedule.every().day.at(RUN_TIME).do(run_monitoring)

@@ -224,7 +224,7 @@ def download_bid_files(bid: dict, download_dir: str) -> list:
             f["local_path"] = local_path
             f["size"] = f"{size / 1024:.0f}KB" if size < 1024 * 1024 else f"{size / 1024 / 1024:.1f}MB"
             downloaded.append(f)
-            logger.info(f"  📥 다운로드: {fname} ({f['size']})")
+            logger.info(f"  다운로드: {fname} ({f['size']})")
 
         except Exception as e:
             logger.error(f"  첨부파일 다운로드 실패 [{f.get('name', url)}]: {e}")
@@ -236,7 +236,7 @@ def download_bid_files(bid: dict, download_dir: str) -> list:
 
 def run_crawler(keywords: list, download_dir: str = "./downloads") -> list:
     if not G2B_API_KEY:
-        logger.error("❌ G2B_API_KEY 미설정! .env에 G2B_API_KEY=디코딩키 추가 필요")
+        logger.error("G2B_API_KEY 미설정! .env에 G2B_API_KEY=디코딩키 추가 필요")
         return []
 
     all_bids = []
@@ -263,5 +263,5 @@ def run_crawler(keywords: list, download_dir: str = "./downloads") -> list:
                     seen.add(key)
                     all_bids.append(bid)
 
-    logger.info(f"✅ 총 {len(all_bids)}개 고유 공고 수집")
+    logger.info(f"총 {len(all_bids)}개 고유 공고 수집")
     return all_bids
