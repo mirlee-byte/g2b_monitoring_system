@@ -27,13 +27,13 @@ from config import (
     DOWNLOAD_DIR, COMPANY_PROFILE, CLAUDE_MODEL,
     MAX_BIDS_PER_RUN, MIN_SCORE_TO_NOTIFY, ANALYZE_MAX_WORKERS
 )
-from crawler import run_crawler
-from analyzer import analyze_bid_eligibility
-from notifier import (
+from src.crawler import run_crawler
+from src.analyzer import analyze_bid_eligibility
+from src.notifier import (
     send_google_chat_message, format_bid_message,
     send_summary_message, send_error_message
 )
-# 첨부파일 실제 업로드(Chat API)는 chat_sender.py 참고 — 도메인 전체 위임 설정 후 사용
+# 첨부파일 실제 업로드(Chat API)는 src/chat_sender.py 참고 — 도메인 전체 위임 설정 후 사용
 
 # 로깅 설정
 logging.basicConfig(

@@ -1,3 +1,4 @@
+# ⚙️ 시스템 엔진 파일 — 설정(키워드·점수·회사정보)은 config.py 에서 바꾸세요. 이 파일은 수정하지 않아도 됩니다.
 """
 나라장터 입찰공고 크롤러 - 공공데이터포털 Open API 방식
 Base URL: https://apis.data.go.kr/1230000/ad/BidPublicInfoService

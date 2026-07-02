@@ -24,16 +24,31 @@
 
 ```
 g2b_monitor/
-├── main.py          # 메인 실행 (스케줄러 / 즉시실행 / 테스트)
-├── crawler.py       # 나라장터 Open API 크롤러
-├── analyzer.py      # Claude AI 적격 판단
-├── notifier.py      # Google Chat Webhook 알림
-├── config.py        # 설정 (키워드, 회사 프로필, 모델 등)
-├── requirements.txt # 필요 패키지
-├── test_api.py      # 나라장터 API 연결 테스트
-├── .env             # API 키 모음 (직접 생성 필요, git 제외)
-└── .gitignore
+├── config.py         # ⭐ 담당자가 수정하는 설정 (키워드·점수·회사정보)
+├── main.py           # 실행 진입점 (스케줄러 / 즉시실행 / 테스트)
+├── requirements.txt  # 필요 패키지 목록
+├── README.md         # 이 문서
+├── setup_scheduler_windows.bat  # 윈도우 자동 실행 등록
+├── Dockerfile / docker-compose.yml   # 컨테이너 배포용
+├── .env              # API 키 (직접 생성, git 제외)
+│
+├── src/              # ⚙️ 시스템 엔진 (담당자 수정 불필요)
+│   ├── crawler.py    #   나라장터 Open API 크롤러
+│   ├── analyzer.py   #   Claude AI 적격 판단
+│   ├── notifier.py   #   Google Chat 알림
+│   └── chat_sender.py#   (고급) Chat API 파일 업로드
+│
+├── docs/
+│   └── DEPLOY.md     # 배포 가이드 (Docker / EC2)
+│
+├── tools/
+│   └── test_api.py   # 나라장터 API 연결 테스트용
+│
+└── downloads/        # 첨부파일 임시 저장 (자동 생성)
 ```
+
+> 👤 **담당자는 `config.py` 하나만 열면 됩니다.** `src/` 폴더는 시스템 엔진이라 건드리지 않아도 됩니다.
+> 설정 변경 방법은 아래 [⚙️ 설정 변경 안내](#️-설정-변경-안내-담당자용)를 참고하세요.
 
 ---
 
@@ -58,8 +73,8 @@ GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/...
 ### 3. API 키 연결 테스트
 
 ```bash
-python3 test_api.py       # 나라장터 API 테스트
-python3 main.py --test    # Google Chat Webhook 테스트
+python3 tools/test_api.py   # 나라장터 API 테스트
+python3 main.py --test      # Google Chat Webhook 테스트
 ```
 
 ### 4. 실행
@@ -81,25 +96,25 @@ python3 main.py          # 스케줄러 시작 (매일 10:00 자동 실행)
 
 ---
 
-## 🔍 검색 키워드 (13개)
+## ⚙️ 설정 변경 안내 (담당자용)
 
-`config.py`에서 수정 가능합니다.
+모든 설정은 **`config.py` 파일 하나**에서 바꿉니다. 파일을 열면 번호가 매겨진
+섹션과 각 항목의 설명(주석)이 있으니 그대로 따라 고치면 됩니다. 수정 후에는
+프로그램을 다시 실행해야 반영됩니다.
 
-```
-VR, XR, AR, 실감형, 메타버스, 확장현실, 가상현실,
-혼합현실, 디지털트윈, 실감미디어, 몰입형, 3D콘텐츠, 디지털콘텐츠
-```
+| 무엇을 바꾸고 싶을 때 | `config.py`에서 고칠 곳 |
+|---|---|
+| 검색할 키워드 추가/삭제 | **1. 검색 키워드** — 줄 추가(끝에 쉼표), 또는 앞에 `#` 붙여 제외 |
+| 알림 기준을 더 넓게/좁게 | **2. 적격 판단 기준** `MIN_SCORE_TO_NOTIFY` (숫자 ↓ = 더 많이 알림) |
+| 하루 분석 건수 상한 | **2.** `MAX_BIDS_PER_RUN` |
+| 실행 시각 변경 | **3. 실행 시간** `RUN_TIME` (예: `"09:00"`) |
+| 회사 업종·인증·실적 최신화 | **4. 우리 회사 정보** `COMPANY_PROFILE` |
 
----
+**편집 규칙 3가지**: ① 따옴표 `""` 와 쉼표 `,` 는 그대로 두고 글자만 바꾼다 ②
+맨 앞에 `#` 있는 줄(설명)은 지우지 않는다 ③ 숫자는 따옴표 없이, 글자는 따옴표 안에.
 
-## 📊 적격 판단 기준
-
-Claude AI가 0~10점으로 점수를 매기며, **4점 이상**이면 Google Chat으로 알림이 옵니다.
-
-높은 점수를 받는 공고 조건:
-- 공고명에 VR/AR/XR/메타버스/실감형 등 키워드 포함
-- 업종이 소프트웨어사업자, 디지털콘텐츠개발서비스에 해당
-- 용역 형태 (콘텐츠 개발, 플랫폼 구축 등)
+> 적격 점수는 Claude AI가 `config.py`의 **회사 정보**와 공고를 비교해 0~10점으로 매깁니다.
+> 키워드·회사 정보를 최신으로 유지할수록 판단이 정확해집니다.
 
 ---
 
