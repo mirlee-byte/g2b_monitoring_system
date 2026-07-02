@@ -1,4 +1,63 @@
-# AWS EC2 배포 가이드 (cron 예약 실행)
+# 배포 가이드
+
+배포 방식은 두 가지다. **A. 기존 서버에 Docker 컨테이너로 배포**(공유 인스턴스 권장) 또는
+**B. 전용 EC2에 cron으로 배포**. 회사 공유 서버라면 A를 권장한다 — 호스트의 파이썬 환경과
+crontab을 건드리지 않고 격리되기 때문이다.
+
+---
+
+# A. Docker 컨테이너 배포 (기존 인스턴스)
+
+`main.py` 내장 스케줄러를 이용해 컨테이너를 상시 띄워두고, 컨테이너가 매일 10:00(KST)에
+스스로 `run_monitoring`을 실행한다. 호스트 crontab 수정이 필요 없다.
+
+## 준비
+
+- 대상 인스턴스에 Docker(+ Compose plugin)가 설치돼 있어야 한다: `docker --version`, `docker compose version`.
+- 코드를 인스턴스로 가져온다: `git clone https://github.com/mirlee-byte/g2b_monitoring_system.git ~/g2b_monitor && cd ~/g2b_monitor`.
+- `.env`를 인스턴스에 직접 생성(또는 scp). **`.env`와 `service_account.json`은 `.dockerignore`로 이미지에서 제외**되며, 런타임에 `env_file`로만 주입된다 — 절대 이미지에 굽지 않는다.
+
+## 실행 (Compose 권장)
+
+```bash
+cd ~/g2b_monitor
+docker compose up -d --build      # 빌드 후 백그라운드 상시 실행
+docker compose logs -f            # 로그 확인 (기동 시 Webhook 테스트 메시지 1건 전송됨)
+```
+
+컨테이너는 `restart: unless-stopped`라 호스트 재부팅 후에도 자동 기동된다. 타임존은
+이미지에 `Asia/Seoul`로 고정돼 있어 스케줄러의 "10:00"이 한국 시각이다.
+
+## 즉시 1회 테스트 / 중지
+
+```bash
+docker compose run --rm g2b-monitor python main.py --now    # 지금 1회 실행
+docker compose down                                          # 중지·제거
+```
+
+## Compose 없이 docker CLI만 쓸 때
+
+```bash
+docker build -t g2b-monitor .
+docker run -d --name g2b-monitor --restart unless-stopped \
+  --env-file .env -e TZ=Asia/Seoul \
+  --log-opt max-size=10m --log-opt max-file=3 \
+  g2b-monitor
+```
+
+## 코드 업데이트 반영
+
+```bash
+git pull && docker compose up -d --build
+```
+
+> 참고: 스케줄러 모드는 기동 시 Google Chat에 "시스템 테스트" 메시지를 1건 보낸다.
+> 컨테이너가 재시작될 때마다 이 메시지가 오는 게 거슬리면 [main.py](main.py)의
+> `main()`에서 `test_webhook()` 호출을 제거하면 된다.
+
+---
+
+# B. 전용 EC2 배포 (cron 예약 실행)
 
 하루 1회(매일 10:00 KST) 실행되는 작업이므로 상시 서버 프로세스 대신 cron으로 운영한다.
 

@@ -1,0 +1,13 @@
+# 비밀·불필요 파일은 이미지에 넣지 않음 (런타임에 --env-file로 주입)
+.env
+service_account.json
+credentials.json
+token.json
+*.log
+downloads/
+__pycache__/
+__pycache/
+*.pyc
+.git/
+.gitignore
+tmp/
