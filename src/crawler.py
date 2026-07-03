@@ -11,11 +11,8 @@ Base URL: https://apis.data.go.kr/1230000/ad/BidPublicInfoService
 """
 
 import os
-import re
-import time
 import logging
 import requests
-from urllib.parse import urlparse, unquote
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
@@ -170,71 +167,7 @@ def parse_bid_item(item: dict, keyword: str, bid_type: str) -> dict:
     }
 
 
-def _safe_filename(name: str) -> str:
-    """파일명에서 OS 금지문자를 제거하고 길이를 제한"""
-    name = unquote(name or "").strip()
-    name = re.sub(r'[\\/:*?"<>|]', "_", name)
-    name = name.strip(". ")
-    return name[:150] if name else "attachment"
-
-
-def download_bid_files(bid: dict, download_dir: str) -> list:
-    """
-    공고 1건의 첨부파일을 다운로드한다.
-    각 파일 dict에 local_path와 size(바이트)를 채워 넣고, 다운로드 성공한 파일 목록을 반환.
-    나라장터 다운로드 URL은 직접 파일이 아닐 수 있어(HTML 등) best-effort로 처리한다.
-    """
-    files = bid.get("files", [])
-    if not files:
-        return []
-
-    # 공고번호별 하위 폴더에 저장
-    bid_no = _safe_filename(bid.get("bid_no", "unknown"))
-    target_dir = os.path.join(download_dir, bid_no)
-    os.makedirs(target_dir, exist_ok=True)
-
-    downloaded = []
-    for f in files:
-        url = f.get("url", "")
-        if not url:
-            continue
-        try:
-            resp = requests.get(url, timeout=30, stream=True)
-            resp.raise_for_status()
-
-            # 파일명 우선순위: API 제공명 → Content-Disposition → URL 경로
-            fname = f.get("name", "")
-            cd = resp.headers.get("Content-Disposition", "")
-            if not fname and "filename" in cd:
-                m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)', cd)
-                if m:
-                    fname = m.group(1)
-            if not fname:
-                fname = os.path.basename(urlparse(url).path) or "attachment"
-            fname = _safe_filename(fname)
-
-            local_path = os.path.join(target_dir, fname)
-            size = 0
-            with open(local_path, "wb") as out:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        out.write(chunk)
-                        size += len(chunk)
-
-            f["local_path"] = local_path
-            f["size"] = f"{size / 1024:.0f}KB" if size < 1024 * 1024 else f"{size / 1024 / 1024:.1f}MB"
-            downloaded.append(f)
-            logger.info(f"  다운로드: {fname} ({f['size']})")
-
-        except Exception as e:
-            logger.error(f"  첨부파일 다운로드 실패 [{f.get('name', url)}]: {e}")
-
-        time.sleep(0.2)
-
-    return downloaded
-
-
-def run_crawler(keywords: list, download_dir: str = "./downloads") -> list:
+def run_crawler(keywords: list) -> list:
     if not G2B_API_KEY:
         logger.error("G2B_API_KEY 미설정! .env에 G2B_API_KEY=디코딩키 추가 필요")
         return []

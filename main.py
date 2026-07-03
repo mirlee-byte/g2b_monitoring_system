@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import (
     GOOGLE_CHAT_WEBHOOK_URL, SEARCH_KEYWORDS, RUN_TIME,
-    DOWNLOAD_DIR, COMPANY_PROFILE, CLAUDE_MODEL,
+    COMPANY_PROFILE, CLAUDE_MODEL,
     MAX_BIDS_PER_RUN, MIN_SCORE_TO_NOTIFY, ANALYZE_MAX_WORKERS
 )
 from src.crawler import run_crawler
@@ -33,7 +33,6 @@ from src.notifier import (
     send_google_chat_message, format_bid_message,
     send_summary_message, send_error_message
 )
-# 첨부파일 실제 업로드(Chat API)는 src/chat_sender.py 참고 — 도메인 전체 위임 설정 후 사용
 
 # 로깅 설정
 logging.basicConfig(
@@ -57,7 +56,7 @@ def run_monitoring():
     try:
         # 1단계: 크롤링
         logger.info("나라장터 크롤링 시작...")
-        bids = run_crawler(SEARCH_KEYWORDS, DOWNLOAD_DIR)
+        bids = run_crawler(SEARCH_KEYWORDS)
 
         if not bids:
             logger.info("검색된 공고가 없습니다.")
